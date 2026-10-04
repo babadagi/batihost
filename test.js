@@ -24,7 +24,7 @@ srv.on('message', (m, r) => {
 srv.bind(0, '127.0.0.1', async () => {
   const port = srv.address().port;
   const p = await raknetPing('127.0.0.1', 4, port);
-  assert.strictEqual(p.online, 7); assert.strictEqual(p.max, 100);
+  assert.strictEqual(p.playersOnline, 7); assert.strictEqual(p.playersMax, 100);
   assert.strictEqual(p.version, '1.21.50'); assert.strictEqual(p.levelName, 'Dünya'); assert.strictEqual(p.portV6, 19133);
   const q = await gs4Query('127.0.0.1', 4, port);
   assert.deepStrictEqual(q.players, ['Ali', 'Veli']);

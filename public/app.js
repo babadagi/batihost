@@ -66,7 +66,7 @@ function render(d) {
       <p style="color:var(--mut);font-size:.9rem">İpucu: Sunucunun <b>UDP</b> portunun (TCP değil) güvenlik duvarında açık olduğundan emin ol.</p></div>`;
     return;
   }
-  const pct = d.max ? Math.min(100, Math.round((d.online / d.max) * 100)) : 0;
+  const pct = d.playersMax ? Math.min(100, Math.round((d.playersOnline / d.playersMax) * 100)) : 0;
   const q = d.query;
   const players = q?.players?.length ? `<h3>Oyuncular (${q.players.length})</h3><div class="chips">${q.players.map((p) => `<span class="chip">${esc(p)}</span>`).join('')}</div>` : '';
   const plugins = q?.plugins?.length ? `<h3>Eklentiler (${q.plugins.length})</h3><div class="chips">${q.plugins.map((p) => `<span class="chip">${esc(p)}</span>`).join('')}</div>` : '';
@@ -75,7 +75,7 @@ function render(d) {
     <div class="status"><span class="badge on"><i class="dot"></i>ÇEVRİMİÇİ</span><span class="addr">${esc(addr)} · ${esc(d.ip)}</span></div>
     ${d.warning ? `<p class="warn">⚠ ${esc(d.warning)}</p>` : ''}
     <div class="motd">${mcToHtml(d.motd) || '<span style="color:#888">(MOTD yok)</span>'}</div>
-    <div class="pl"><span>👥 Oyuncular</span><span>${d.online} / ${d.max} (%${pct})</span></div>
+    <div class="pl"><span>👥 Oyuncular</span><span>${d.playersOnline} / ${d.playersMax} (%${pct})</span></div>
     <div class="bar"><i style="width:${pct}%"></i></div>
     <div class="grid">
       ${item('Gecikme (ping)', d.latency + ' ms')}
@@ -101,7 +101,7 @@ function render(d) {
     <details><summary>Ham sunucu cevabı</summary><pre>${esc(d.raw)}</pre></details>
   </div>`;
   $('#copy').onclick = () => navigator.clipboard?.writeText(
-    `${addr} — ÇEVRİMİÇİ\n${stripMc(d.motd)}\nOyuncu: ${d.online}/${d.max}\nSürüm: ${d.version} (protokol ${d.protocol})\nPing: ${d.latency} ms`).then(() => { $('#copy').textContent = '✓ Kopyalandı'; });
+    `${addr} — ÇEVRİMİÇİ\n${stripMc(d.motd)}\nOyuncu: ${d.playersOnline}/${d.playersMax}\nSürüm: ${d.version} (protokol ${d.protocol})\nPing: ${d.latency} ms`).then(() => { $('#copy').textContent = '✓ Kopyalandı'; });
   $('#dl').onclick = () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }));
