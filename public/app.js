@@ -21,6 +21,7 @@ function mcToHtml(text) {
   for (let i = 0; i < text.length; i++) {
     if (text[i] === '§' && i + 1 < text.length) {
       flush(buf); buf = '';
+      if (text[i + 1] === '#' && /^#[0-9a-f]{6}$/i.test(text.substr(i + 1, 7))) { col = text.substr(i + 1, 7); st = { b: 0, i: 0, u: 0, s: 0 }; i += 7; continue; }
       const c = text[++i].toLowerCase();
       if (COLORS[c]) { col = COLORS[c]; st = { b: 0, i: 0, u: 0, s: 0 }; }
       else if (c === 'l') st.b = 1; else if (c === 'o') st.i = 1;
@@ -31,13 +32,14 @@ function mcToHtml(text) {
   flush(buf);
   return html;
 }
-const stripMc = (t) => String(t || '').replace(/§./g, '');
+const stripMc = (t) => String(t || '').replace(/§(#[0-9a-fA-F]{6}|.)/g, '');
 
 // Tür seçimi
 document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
   type = b.dataset.type;
   document.querySelectorAll('.tab').forEach((x) => { const a = x === b; x.classList.toggle('active', a); x.setAttribute('aria-selected', a); });
   store('mcc-type', type);
+  if (['', '19132', '25565'].includes(portEl.value)) portEl.value = type === 'java' ? '25565' : '19132';
 }));
 try { const t = localStorage.getItem('mcc-type'); if (t) document.querySelector(`.tab[data-type=${t}]`)?.click(); } catch {}
 
@@ -63,18 +65,20 @@ function render(d) {
   const addr = `${d.host}:${d.port}`;
   if (!d.online) {
     out.innerHTML = `<div class="card"><div class="status"><span class="badge off"><i class="dot"></i>ÇEVRİMDIŞI</span><span class="addr">${esc(addr)} · ${esc(d.ip)}</span></div><p class="err">${esc(d.error)}</p>
-      <p style="color:var(--mut);font-size:.9rem">İpucu: Sunucunun <b>UDP</b> portunun (TCP değil) güvenlik duvarında açık olduğundan emin ol.</p></div>`;
+      <p style="color:var(--mut);font-size:.9rem">İpucu: Sunucunun ${d.type === 'java' ? '<b>TCP</b>' : '<b>UDP</b> (TCP değil)'} portunun güvenlik duvarında açık olduğundan emin ol.</p></div>`;
     return;
   }
   const pct = d.playersMax ? Math.min(100, Math.round((d.playersOnline / d.playersMax) * 100)) : 0;
   const q = d.query;
-  const players = q?.players?.length ? `<h3>Oyuncular (${q.players.length})</h3><div class="chips">${q.players.map((p) => `<span class="chip">${esc(p)}</span>`).join('')}</div>` : '';
+  const names = q?.players?.length ? q.players : (d.sample || []);
+  const players = names.length ? `<h3>${q?.players?.length ? 'Oyuncular' : 'Oyuncu örneği'} (${names.length})</h3><div class="chips">${names.map((p) => `<span class="chip">${esc(p)}</span>`).join('')}</div>` : '';
+  const mods = d.mods?.length ? `<h3>Modlar (${d.mods.length})</h3><div class="chips">${d.mods.map((p) => `<span class="chip">${esc(p)}</span>`).join('')}</div>` : '';
   const plugins = q?.plugins?.length ? `<h3>Eklentiler (${q.plugins.length})</h3><div class="chips">${q.plugins.map((p) => `<span class="chip">${esc(p)}</span>`).join('')}</div>` : '';
-  const queryNote = !q ? `<p style="color:var(--mut);font-size:.85rem;margin-top:14px">Oyuncu isimleri ve eklenti listesi için sunucuda Query açık olmalı${d.type === 'pocketmine' ? ' (<code>pocketmine.yml</code> → <code>query.enable: true</code>)' : ''}.</p>` : '';
+  const queryNote = !q ? `<p style="color:var(--mut);font-size:.85rem;margin-top:14px">Oyuncu isimleri ve eklenti listesi için sunucuda Query açık olmalı${d.type === 'pocketmine' ? ' (<code>pocketmine.yml</code> → <code>query.enable: true</code>)' : d.type === 'java' ? ' (<code>server.properties</code> → <code>enable-query=true</code>)' : ''}.</p>` : '';
   out.innerHTML = `<div class="card">
     <div class="status"><span class="badge on"><i class="dot"></i>ÇEVRİMİÇİ</span><span class="addr">${esc(addr)} · ${esc(d.ip)}</span></div>
     ${d.warning ? `<p class="warn">⚠ ${esc(d.warning)}</p>` : ''}
-    <div class="motd">${mcToHtml(d.motd) || '<span style="color:#888">(MOTD yok)</span>'}</div>
+    <div class="mhead">${d.favicon ? `<img class="fav" alt="Sunucu ikonu" src="${d.favicon}">` : ''}<div class="motd">${mcToHtml(d.motd) || '<span style="color:#888">(MOTD yok)</span>'}</div></div>
     <div class="pl"><span>👥 Oyuncular</span><span>${d.playersOnline} / ${d.playersMax} (%${pct})</span></div>
     <div class="bar"><i style="width:${pct}%"></i></div>
     <div class="grid">
@@ -87,13 +91,15 @@ function render(d) {
       ${item('Oyun modu', d.gamemode)}
       ${item('IPv4 / IPv6 portu', [d.portV4, d.portV6].filter(Boolean).join(' / '))}
       ${item('Çözülen IP', d.ip + ' (IPv' + d.ipVersion + ')')}
+      ${item('SRV kaydı', d.srv)}
+      ${item('Güvenli sohbet', d.secureChat === null || d.secureChat === undefined ? null : d.secureChat ? 'Zorunlu' : 'Zorunlu değil')}
       ${item('Sunucu ID (GUID)', d.serverId)}
       ${item('Harita', q?.map)}
       ${item('Ana makine adı', q?.hostname && stripMc(q.hostname))}
       ${item('Oyun türü', q?.gametype)}
       ${item('Kontrol zamanı', new Date(d.checkedAt).toLocaleString('tr-TR'))}
     </div>
-    ${players}${plugins}${queryNote}
+    ${players}${plugins}${mods}${queryNote}
     <div class="tools">
       <button type="button" id="copy">📋 Bilgileri kopyala</button>
       <button type="button" id="dl">⬇ JSON indir</button>

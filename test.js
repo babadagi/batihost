@@ -3,7 +3,8 @@
 process.env.ALLOW_PRIVATE = '1';
 const dgram = require('dgram');
 const assert = require('assert');
-const { raknetPing, gs4Query } = require('./server');
+const net = require('net');
+const { raknetPing, gs4Query, javaPing, chatToLegacy } = require('./server');
 const MAGIC = Buffer.from('00ffff00fefefefefdfdfdfd12345678', 'hex');
 
 const srv = dgram.createSocket('udp4');
@@ -30,6 +31,32 @@ srv.bind(0, '127.0.0.1', async () => {
   assert.deepStrictEqual(q.players, ['Ali', 'Veli']);
   assert.deepStrictEqual(q.plugins, ['Alpha 1.0', 'Beta 2.1']);
   assert.strictEqual(q.software, 'PocketMine-MP 5.20.0');
-  console.log('OK', p.motd, p.latency + 'ms', q.plugins);
-  srv.close(); process.exit(0);
+  console.log('OK bedrock/pocketmine', p.motd, p.latency + 'ms', q.plugins);
+  srv.close();
+
+  // --- Java: sahte Server List Ping sunucusu (parçalı gönderim dahil) ---
+  const vi = (n) => { const b = []; do { let t = n & 0x7f; n >>>= 7; if (n) t |= 0x80; b.push(t); } while (n); return Buffer.from(b); };
+  const pk = (id, d) => { const body = Buffer.concat([vi(id), d]); return Buffer.concat([vi(body.length), body]); };
+  const status = JSON.stringify({ version: { name: 'Paper 1.21.4', protocol: 769 }, players: { max: 50, online: 0, sample: [{ name: 'Steve', id: 'x' }] },
+    description: { text: '', extra: [{ text: 'Merhaba ', color: 'gold', bold: true }, { text: 'Dünya', color: '#ff0080' }] }, favicon: 'data:image/png;base64,iVBORw0KGgo=', enforcesSecureChat: true });
+  const js = net.createServer((c) => {
+    let got = Buffer.alloc(0), sent = false;
+    c.on('data', (d) => {
+      got = Buffer.concat([got, d]);
+      if (!sent && got.includes(Buffer.from('mc.test'))) { // el sıkışma içinde sunucu adı geldi
+        sent = true; const sb = Buffer.from(status), pkt = pk(0, Buffer.concat([vi(sb.length), sb]));
+        c.write(pkt.subarray(0, 5)); setTimeout(() => c.write(pkt.subarray(5)), 30);
+      } else if (sent) { // ping paketi: aynı 8 baytı pong olarak geri yolla
+        c.write(pk(1, d.subarray(-8))); c.end();
+      }
+    });
+  });
+  js.listen(0, '127.0.0.1', async () => {
+    const r = await javaPing('127.0.0.1', 4, js.address().port, 'mc.test');
+    assert.strictEqual(r.status.players.online, 0); assert.strictEqual(r.status.version.protocol, 769);
+    assert.ok(r.latency >= 0);
+    assert.strictEqual(chatToLegacy(r.status.description), '§r§6§lMerhaba §r§#ff0080Dünya');
+    console.log('OK java', r.status.version.name, r.latency + 'ms', JSON.stringify(chatToLegacy(r.status.description)));
+    js.close(); process.exit(0);
+  });
 });

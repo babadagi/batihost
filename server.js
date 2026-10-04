@@ -120,6 +120,128 @@ async function gs4Query(address, family, port) {
   return out;
 }
 
+
+// ---------- Java Edition: Server List Ping (TCP) ----------
+const MAX_JAVA_REPLY = 1 << 20;
+const varintBuf = (n) => { const b = []; n >>>= 0; do { let t = n & 0x7f; n >>>= 7; if (n) t |= 0x80; b.push(t); } while (n); return Buffer.from(b); };
+function readVarint(buf, off = 0) {
+  let r = 0, shift = 0, i = off;
+  for (;;) {
+    if (i >= buf.length) return null;
+    const b = buf[i++]; r += (b & 0x7f) * 2 ** shift;
+    if (!(b & 0x80)) return { value: r, size: i - off };
+    shift += 7; if (shift > 35) throw new Error('Geçersiz VarInt');
+  }
+}
+const mcString = (str) => { const b = Buffer.from(str, 'utf8'); return Buffer.concat([varintBuf(b.length), b]); };
+const mcPacket = (id, ...parts) => { const body = Buffer.concat([varintBuf(id), ...parts]); return Buffer.concat([varintBuf(body.length), body]); };
+function takePacket(buf) {
+  const l = readVarint(buf, 0); if (!l) return null;
+  if (l.value > MAX_JAVA_REPLY) throw new Error('Çok büyük cevap');
+  if (buf.length < l.size + l.value) return null;
+  const body = buf.subarray(l.size, l.size + l.value), id = readVarint(body, 0);
+  return { id: id.value, data: body.subarray(id.size), used: l.size + l.value };
+}
+const msSince = (t) => Math.round(Number(process.hrtime.bigint() - t) / 1e5) / 10;
+
+function javaPing(address, family, port, hostname) {
+  return new Promise((resolve, reject) => {
+    const sock = net.connect({ host: address, port, family });
+    let buf = Buffer.alloc(0), status = null, tReq, tPing, pongTimer, done = false;
+    const finish = (err, val) => { if (done) return; done = true; clearTimeout(timer); clearTimeout(pongTimer); sock.destroy(); err ? reject(err) : resolve(val); };
+    const timer = setTimeout(() => finish(new Error('timeout')), TIMEOUT_MS);
+    sock.once('connect', () => {
+      const port2 = Buffer.alloc(2); port2.writeUInt16BE(port);
+      sock.write(Buffer.concat([mcPacket(0x00, varintBuf(765), mcString(hostname), port2, varintBuf(1)), mcPacket(0x00)]));
+      tReq = process.hrtime.bigint();
+    });
+    sock.on('data', (d) => {
+      buf = Buffer.concat([buf, d]);
+      try {
+        for (;;) {
+          const p = takePacket(buf); if (!p) break;
+          buf = buf.subarray(p.used);
+          if (!status) {
+            if (p.id !== 0) return finish(new Error('Geçersiz Java cevabı'));
+            const l = readVarint(p.data, 0);
+            status = JSON.parse(p.data.subarray(l.size, l.size + l.value).toString('utf8'));
+            const reqMs = msSince(tReq), t = Buffer.alloc(8); t.writeBigInt64BE(BigInt(Date.now()));
+            tPing = process.hrtime.bigint(); sock.write(mcPacket(0x01, t));
+            pongTimer = setTimeout(() => finish(null, { status, latency: reqMs }), 1500);
+          } else if (p.id === 1) return finish(null, { status, latency: msSince(tPing) });
+        }
+      } catch (e) { finish(new Error('Geçersiz Java cevabı')); }
+    });
+    sock.on('error', (e) => finish(e.code === 'ECONNREFUSED' ? new Error('Bağlantı reddedildi (sunucu kapalı ya da port yanlış).') : e));
+    sock.on('close', () => finish(status ? null : new Error('Sunucu bağlantıyı kapattı.'), status && { status, latency: msSince(tReq) }));
+  });
+}
+
+// Java sohbet bileşeni (JSON MOTD) → § renk kodlu düz metin
+const CHAT_COLORS = { black: '0', dark_blue: '1', dark_green: '2', dark_aqua: '3', dark_red: '4', dark_purple: '5', gold: '6', gray: '7', dark_gray: '8', blue: '9', green: 'a', aqua: 'b', red: 'c', light_purple: 'd', yellow: 'e', white: 'f' };
+const CHAT_FMT = [['bold', 'l'], ['italic', 'o'], ['underlined', 'n'], ['strikethrough', 'm'], ['obfuscated', 'k']];
+function chatToLegacy(c, inh = {}) {
+  if (c === null || c === undefined) return '';
+  if (typeof c === 'string') return c;
+  if (Array.isArray(c)) return c.map((x) => chatToLegacy(x, inh)).join('');
+  if (typeof c !== 'object') return String(c);
+  const st = { ...inh }; if (c.color) st.color = c.color;
+  for (const [k] of CHAT_FMT) if (c[k] !== undefined) st[k] = !!c[k];
+  let pre = '§r';
+  if (st.color) pre += CHAT_COLORS[st.color] ? '§' + CHAT_COLORS[st.color] : /^#[0-9a-f]{6}$/i.test(st.color) ? '§' + st.color : '';
+  for (const [k, code] of CHAT_FMT) if (st[k]) pre += '§' + code;
+  const text = c.text ?? c.translate ?? '';
+  return (text ? pre + text : '') + (Array.isArray(c.extra) ? c.extra.map((x) => chatToLegacy(x, st)).join('') : '');
+}
+
+async function srvLookup(host) {
+  try {
+    const recs = await dns.resolveSrv('_minecraft._tcp.' + host);
+    recs.sort((a, b) => a.priority - b.priority || b.weight - a.weight);
+    return recs[0] ? { target: recs[0].name.replace(/\.$/, ''), port: recs[0].port } : null;
+  } catch { return null; }
+}
+
+async function checkJava(host, port, portGiven) {
+  let connectHost = host, connectPort = port, srv = null;
+  if (!net.isIP(host) && (!portGiven || port === 25565)) {
+    srv = await srvLookup(host);
+    if (srv) { connectHost = srv.target; connectPort = srv.port; }
+  }
+  const { address, family } = await resolveHost(connectHost);
+  const result = { host, port, type: 'java', ip: address, ipVersion: family, checkedAt: new Date().toISOString() };
+  if (srv) result.srv = `${srv.target}:${srv.port}`;
+  let r;
+  try { r = await javaPing(address, family, connectPort, host); }
+  catch (e) {
+    return Object.assign(result, { online: false, error: e.message === 'timeout'
+      ? 'Sunucu cevap vermedi (kapalı, port yanlış ya da TCP engelli olabilir).' : e.message });
+  }
+  const st = r.status || {};
+  const { favicon, ...rest } = st;
+  const modList = st.forgeData?.mods?.map((m) => `${m.modId || m.modid} ${m.modmarker || ''}`.trim())
+    || st.modinfo?.modList?.map((m) => `${m.modid} ${m.version || ''}`.trim()) || null;
+  const verName = String(st.version?.name ?? '').replace(/§./g, '');
+  const sw = verName.match(/^([A-Za-z][A-Za-z0-9_\-. ]*?)\s+\d/);
+  Object.assign(result, {
+    online: true, edition: 'Java', latency: r.latency,
+    motd: chatToLegacy(st.description),
+    protocol: st.version?.protocol ?? null, version: verName || null,
+    playersOnline: st.players?.online ?? 0, playersMax: st.players?.max ?? 0,
+    sample: (st.players?.sample || []).map((p) => String(p.name || '').replace(/§./g, '')).filter(Boolean).slice(0, 50),
+    favicon: typeof favicon === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(favicon) && favicon.length < 200000 ? favicon : null,
+    secureChat: typeof st.enforcesSecureChat === 'boolean' ? st.enforcesSecureChat : null,
+    mods: modList ? modList.slice(0, 300) : null,
+    software: sw ? sw[1] : 'Java (vanilla / bilinmiyor)',
+    raw: JSON.stringify(rest, null, 1).slice(0, 6000),
+  });
+  try {
+    const q = await gs4Query(address, family, connectPort);
+    result.query = q; if (q.software) result.software = q.software;
+  } catch { result.query = null; }
+  return result;
+}
+
 // ---------- Basit hız sınırı ----------
 const hits = new Map();
 function rateLimited(ip) {
@@ -131,7 +253,8 @@ function rateLimited(ip) {
 setInterval(() => { const n = Date.now(); for (const [k, v] of hits) if (!v.some((t) => n - t < 60000)) hits.delete(k); }, 60000).unref();
 
 // ---------- Kontrol ----------
-async function check(host, port, type) {
+async function check(host, port, type, portGiven) {
+  if (type === 'java') return checkJava(host, port, portGiven);
   const { address, family } = await resolveHost(host);
   const result = { host, port, type, ip: address, ipVersion: family, checkedAt: new Date().toISOString() };
   try {
@@ -181,15 +304,17 @@ const server = http.createServer(async (req, res) => {
     try {
       let host = (url.searchParams.get('host') || '').trim();
       let port = url.searchParams.get('port');
-      const type = url.searchParams.get('type') === 'pocketmine' ? 'pocketmine' : 'bedrock';
+      const t = url.searchParams.get('type');
+      const type = t === 'pocketmine' || t === 'java' ? t : 'bedrock';
       // host:port biçimini destekle
       const m = host.match(/^(?:\[([^\]]+)\]|([^:]+)):(\d{1,5})$/);
       if (m) { host = m[1] || m[2]; port = port || m[3]; }
       host = host.replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '');
-      port = port ? Number(port) : 19132;
+      const portGiven = !!port;
+      port = port ? Number(port) : (type === 'java' ? 25565 : 19132);
       if (!host || host.length > 253 || !/^[a-zA-Z0-9.\-:_]+$/.test(host)) throw httpError(400, 'Geçersiz sunucu adresi.');
       if (!Number.isInteger(port) || port < 1 || port > 65535) throw httpError(400, 'Port 1-65535 arasında olmalı.');
-      send(res, 200, await check(host, port, type), { 'Cache-Control': 'no-store' });
+      send(res, 200, await check(host, port, type, portGiven), { 'Cache-Control': 'no-store' });
     } catch (e) {
       send(res, e.status || 500, { error: e.status ? e.message : 'Beklenmeyen hata.' });
     }
@@ -208,4 +333,4 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => console.log(`Minecraft Checker http://localhost:${PORT}`));
 }
-module.exports = { server, raknetPing, gs4Query };
+module.exports = { server, raknetPing, gs4Query, javaPing, chatToLegacy };

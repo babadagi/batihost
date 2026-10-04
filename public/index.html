@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BatiHost · Minecraft Sunucu Kontrol</title>
-<meta name="description" content="Minecraft Bedrock ve PocketMine sunucularının online durumunu, oyuncu sayısını ve tüm detaylarını anında kontrol edin.">
+<meta name="description" content="Minecraft Java, Bedrock ve PocketMine sunucularının online durumunu, oyuncu sayısını ve tüm detaylarını anında kontrol edin.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%2355ff55'/><rect x='2' y='2' width='12' height='12' fill='%232e8b2e'/></svg>">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -13,7 +13,7 @@
   <header class="hero">
     <div class="logo" aria-hidden="true"></div>
     <h1>Minecraft Sunucu Kontrol</h1>
-    <p>Bedrock ve PocketMine sunucularının durumunu saniyeler içinde öğren.</p>
+    <p>Java, Bedrock ve PocketMine sunucularının durumunu saniyeler içinde öğren.</p>
   </header>
 
   <form id="form" class="card" autocomplete="off">
@@ -23,6 +23,9 @@
       </button>
       <button type="button" role="tab" class="tab" data-type="pocketmine" aria-selected="false">
         <b>PocketMine</b><small>PocketMine-MP · eklenti listesi</small>
+      </button>
+      <button type="button" role="tab" class="tab" data-type="java" aria-selected="false">
+        <b>Java</b><small>Java Edition · TCP / SRV</small>
       </button>
     </div>
     <div class="row">
@@ -42,7 +45,7 @@
 
   <section id="result" aria-live="polite"></section>
 
-  <footer>Bedrock/PocketMine UDP (RakNet) protokolü kullanılır. Varsayılan port <code>19132</code>.</footer>
+  <footer>Bedrock/PocketMine: UDP (RakNet), port <code>19132</code>. Java: TCP (Server List Ping + SRV), port <code>25565</code>.</footer>
 </main>
 <script src="app.js"></script>
 </body>

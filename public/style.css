@@ -8,7 +8,7 @@ body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-appl
 h1{margin:0;font-size:clamp(1.5rem,4vw,2.1rem)}
 .hero p{margin:6px 0 0;color:var(--mut)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
-.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
 .tab{background:var(--card2);color:var(--tx);border:2px solid var(--line);border-radius:10px;padding:10px;text-align:left;cursor:pointer;font:inherit}
 .tab b{display:block}.tab small{color:var(--mut);font-size:.8rem}
 .tab.active{border-color:var(--ok);box-shadow:inset 0 0 0 1px var(--ok)}
@@ -49,4 +49,6 @@ details{margin-top:14px}summary{cursor:pointer;color:var(--mut)}
 pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:.82rem}
 footer{margin-top:28px;text-align:center;color:var(--mut);font-size:.82rem}
 .spin{text-align:center;color:var(--mut);padding:30px}
+@media (max-width:620px){.tabs{grid-template-columns:1fr}}
+.mhead{display:flex;gap:14px;align-items:center;margin:14px 0}.mhead .motd{flex:1;margin:0}.fav{width:72px;height:72px;image-rendering:pixelated;border-radius:6px;border:1px solid var(--line);flex:none}
 @media (max-width:520px){.port{width:100%}.go{width:100%}.row.opts{align-items:flex-start}}
