@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BatiHost · Minecraft Sunucu Kontrol</title>
+<meta name="description" content="Minecraft Bedrock ve PocketMine sunucularının online durumunu, oyuncu sayısını ve tüm detaylarını anında kontrol edin.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%2355ff55'/><rect x='2' y='2' width='12' height='12' fill='%232e8b2e'/></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="wrap">
+  <header class="hero">
+    <div class="logo" aria-hidden="true"></div>
+    <h1>Minecraft Sunucu Kontrol</h1>
+    <p>Bedrock ve PocketMine sunucularının durumunu saniyeler içinde öğren.</p>
+  </header>
+
+  <form id="form" class="card" autocomplete="off">
+    <div class="tabs" role="tablist" aria-label="Sunucu türü">
+      <button type="button" role="tab" class="tab active" data-type="bedrock" aria-selected="true">
+        <b>Bedrock</b><small>Resmî BDS / Realms uyumlu</small>
+      </button>
+      <button type="button" role="tab" class="tab" data-type="pocketmine" aria-selected="false">
+        <b>PocketMine</b><small>PocketMine-MP · eklenti listesi</small>
+      </button>
+    </div>
+    <div class="row">
+      <label class="grow">Sunucu adresi
+        <input id="host" name="host" placeholder="play.sunucum.com veya 123.45.67.89" required spellcheck="false" autocapitalize="off">
+      </label>
+      <label class="port">Port
+        <input id="port" name="port" type="number" min="1" max="65535" value="19132">
+      </label>
+      <button class="go" id="go" type="submit">Kontrol Et</button>
+    </div>
+    <div class="row opts">
+      <label class="chk"><input type="checkbox" id="auto"> Her 15 sn'de yenile</label>
+      <div id="history" class="history"></div>
+    </div>
+  </form>
+
+  <section id="result" aria-live="polite"></section>
+
+  <footer>Bedrock/PocketMine UDP (RakNet) protokolü kullanılır. Varsayılan port <code>19132</code>.</footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
